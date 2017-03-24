@@ -21,3 +21,7 @@ project/plugins/project/
 .settings/*
 .classpath
 .cache-main
+
+#Misc
+Main.scala
+dbconfig.conf
