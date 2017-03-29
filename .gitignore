@@ -24,4 +24,4 @@ project/plugins/project/
 
 #Misc
 Main.scala
-dbconfig.conf
+*.conf

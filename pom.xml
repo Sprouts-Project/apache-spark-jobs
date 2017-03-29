@@ -4,7 +4,7 @@
 
 	<groupId>sprouts</groupId>
 	<artifactId>spark</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.0.1</version>
 	<packaging>jar</packaging>
 
 	<name>apache-spark-jobs</name>
@@ -95,9 +95,27 @@
 			<artifactId>mysql-connector-java</artifactId>
 			<version>5.1.39</version>
 		</dependency>
+		<!-- Scala MongoDB connector -->
+		<dependency>
+			<groupId>org.mongodb</groupId>
+			<artifactId>mongo-java-driver</artifactId>
+			<version>3.4.2</version>
+		</dependency>
+
 	</dependencies>
 
 	<repositories>
+		<!-- This is for taking the dependencies from the artifactories repository -->
+		<repository>
+			<id>nexus</id>
+			<url>http://nexus.sprouts-project.com:8081</url>
+			<releases>
+				<enabled>true</enabled>
+			</releases>
+			<snapshots>
+				<enabled>true</enabled>
+			</snapshots>
+		</repository>
 		<repository>
 			<id>TypesafeRepo</id>
 			<name>Typesafe Repo</name>
@@ -193,5 +211,19 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<!-- This uploads the generated jar to the artifactories repository -->
+	<distributionManagement>
+		<repository>
+			<id>nexus</id>
+			<name>Releases</name>
+			<url>http://nexus.sprouts-project.com:8081/repository/maven-releases</url>
+		</repository>
+		<snapshotRepository>
+			<id>nexus</id>
+			<name>Snapshot</name>
+			<url>http://nexus.sprouts-project.com:8081/repository/maven-snapshots</url>
+		</snapshotRepository>
+	</distributionManagement>
 
 </project>

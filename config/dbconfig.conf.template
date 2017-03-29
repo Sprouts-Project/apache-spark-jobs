@@ -1,0 +1,16 @@
+#Thats a template file that must be located at /data/jobserver/conf
+#DB configuration: MySQL read database and
+#Datawarehouse MongoDB URI. This URI is for deleting
+#the collection before commiting changes
+mysql {
+	user = ""
+	password = ""
+	host = ""
+	port = ""
+	driver = ""
+	db = ""
+}
+
+mongodb {
+	mongodbUri = ""
+}
