@@ -92,7 +92,6 @@ object ItemProfiles extends SparkJob {
     }
       .reduceByKey(_ + _) //And reduce by key (cluster index)
       .join(centroids) //Finally, we join this rdd with the centroids rdd so that we have (cluster_index, (number of items, list of categories names))
-
     //DF to save in MongoDB
     val itemProfile =
       sqlContext.createDataFrame(
