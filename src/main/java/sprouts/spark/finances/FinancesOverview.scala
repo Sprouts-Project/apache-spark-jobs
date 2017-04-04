@@ -26,7 +26,7 @@ object FinancesOverview extends SparkJob{
   def execute(sc:SparkContext): Any = {
     val sqlContext = SQLContext.getOrCreate(sc)
     
-    val orders = ReadMySQL.read("(SELECT totalPrice, YEAR(date) as year, MONTH(date) as month,state FROM order_ join customer on customer.id = order_.customer_id WHERE date > DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 12 MONTH)) AS data",sqlContext)
+    val orders = ReadMySQL.read("(SELECT totalPrice, YEAR(date) as year, MONTH(date) as month,state FROM order_ join customer on customer.id = order_.customer_id WHERE date > DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 24 MONTH)) AS data",sqlContext)
    
     //The total monthly sales value during the last 24 months
      val salesValues = orders.map{ x => (( x.getLong(1), x.getLong(2)),x.getDouble(0))}
