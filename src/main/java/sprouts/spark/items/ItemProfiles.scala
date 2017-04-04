@@ -23,8 +23,10 @@ import com.mongodb.spark.MongoSpark
 import com.mongodb.spark.config.WriteConfig
 import sprouts.spark.utils.WriteMongoDB
 import sprouts.spark.utils.ReadMySQL
+import sprouts.spark.stock.ItemVector
 
 case class ItemProfile(profile_id: Int, number_items: Long, categories: List[String])
+case class ItemProfileMappedToItem(profile_id:Int, item_id:Int, categories: List[String])
 
 object ItemProfiles extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -83,10 +85,17 @@ object ItemProfiles extends SparkJob {
       .map { x => (x._1.intValue(), x._2) } //Put first cluster index
 
     //amount of items for each profile
-    val numItemsByProfile = rddItemIdVectors.map {
+    val itemMappedToProfile = rddItemIdVectors.map {
       x =>
         (x._1, clusters.predict(x._2)) // For each item, we predict what cluster it belongs to
-    }.map {
+    }
+    
+    val itemProfileItemIdMap = sqlContext.createDataFrame(
+    itemMappedToProfile.map(_.swap).join(centroids) //(centroid[item_profile], (item id, cats))
+      .map{ x => ItemProfileMappedToItem(x._1, x._2._1, x._2._2) }
+    )
+
+    val numItemsByProfile = itemMappedToProfile.map {
       x =>
         (x._2, 1) //We want to know how many items belongs to each cluster, so we map cluster (x._2) to 1
     }
@@ -102,6 +111,7 @@ object ItemProfiles extends SparkJob {
 
     //We finally persist the DF into MongoDB to extract it from the dashboard
     WriteMongoDB.deleteAndPersistDF(itemProfile, sqlContext, "item_profiles")
+    WriteMongoDB.deleteAndPersistDF(itemProfileItemIdMap, sqlContext, "item_profile_item_id_map")
     itemProfile.collect()
   }
 
