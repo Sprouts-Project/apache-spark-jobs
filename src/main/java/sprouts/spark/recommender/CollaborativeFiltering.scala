@@ -1,15 +1,20 @@
 package sprouts.spark.recommender
 
-import spark.jobserver.SparkJob
-import spark.jobserver.SparkJobValid
+import java.io.IOException
+
 import org.apache.spark.SparkContext
-import spark.jobserver.SparkJobValidation
-import org.apache.spark.sql.SQLContext
-import com.typesafe.config.Config
-import sprouts.spark.utils.ReadMySQL
 import org.apache.spark.mllib.recommendation.ALS
 import org.apache.spark.mllib.recommendation.Rating
-import sprouts.spark.utils.WriteMongoDB
+import org.apache.spark.sql.SQLContext
+
+import com.typesafe.config.Config
+
+import spark.jobserver.SparkJob
+import spark.jobserver.SparkJobValid
+import spark.jobserver.SparkJobValidation
+import sprouts.spark.utils.ReadMySQL
+import scalax.file.Path
+
 
 object CollaborativeFiltering extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -36,6 +41,13 @@ object CollaborativeFiltering extends SparkJob {
     val model = ALS.train(ratings, rank, numIterations, 0.01) //creates the model
 
     //val modelBroadcast = sc.broadcast(model)
+
+    val path = Path.fromString("/data/jobserver/models") // TODO: this path could be passed by config file
+    try {
+      path.deleteRecursively(continueOnFailure = false)
+    } catch {
+      case e: IOException => // some file could not be deleted
+    }
 
     model.save(sc, "/data/jobserver/models")
 
