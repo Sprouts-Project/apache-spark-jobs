@@ -84,7 +84,7 @@ object ItemProfiles extends SparkJob {
       .map(_.swap)
       .map { x => (x._1.intValue(), x._2) } // Put first cluster index
 
-    //a mount of items for each profile
+    // amount of items for each profile
     val itemMappedToProfile = rddItemIdVectors.map {
       x =>
         (x._1, clusters.predict(x._2)) // For each item, we predict what cluster it belongs to
