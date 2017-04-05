@@ -26,7 +26,7 @@ object SalesPredictions extends SparkJob {
   }
 
   override def validate(sc: SparkContext, config: Config): SparkJobValidation = {
-    SparkJobValid //Always valid
+    SparkJobValid // Always valid
   }
 
   def execute(sc: SparkContext): Any = {
@@ -36,27 +36,27 @@ object SalesPredictions extends SparkJob {
       """
 (SELECT ordereditem.quantity,
        MONTH(order_.date) as month, YEAR(order_.date) as year
-FROM ordereditem 
+FROM ordereditem
 INNER JOIN order_ ON ordereditem.order_id = order_.id AND order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
 AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
       """
 
     val df = ReadMySQL.read(mySQLquery, sqlContext).rdd
-      .map { x => ((x.getLong(1), x.getLong(2)), x.getInt(0)) } //Map ( (month, year), sales). (month, year) as key
-      .reduceByKey(_ + _) //We obtain the sales for each month
+      .map { x => ((x.getLong(1), x.getLong(2)), x.getInt(0)) } // Map ( (month, year), sales). (month, year) as key
+      .reduceByKey(_ + _) // We obtain the sales for each month
       .map {
-        x => //Map each ((month,year),sales) with a vector, with consists of (label=sales, features=(month,year))
-          //SparseVector: 2 = number of features, (0, 1) = indexes
+        x => // Map each ((month,year),sales) with a vector, with consists of (label=sales, features=(month,year))
+          // SparseVector: 2 = number of features, (0, 1) = indexes
           ItemVector(x._2.doubleValue(), new SparseVector(2, Array(0, 1), Array(x._1._1.doubleValue(), x._1._2.doubleValue())))
       }
 
-    //Let's create a dataframe of label and features
+    // Let's create a dataframe of label and features
     val data = sqlContext.createDataFrame(df).na.drop()
 
-    //Get the model
+    // Get the model
     val model = getModel(data)
 
-    //Get the dataframe with ItemVectors representing next 12 months
+    // Get the dataframe with ItemVectors representing next 12 months
     val toPredict = sqlContext.createDataFrame(
       sc
         .parallelize(getDates())
@@ -70,20 +70,20 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
     val pred = model.transform(toPredict)
       .select("features", "prediction")
 
-    //We turn the predictions to case class objects
+    // We turn the predictions to case class objects
     val salesPred = sqlContext.createDataFrame(
       pred.rdd.map {
         x =>
-          Sale(x.getAs[SparseVector]("features").toArray(0).intValue, //Gets month
-            x.getAs[SparseVector]("features").toArray(1).intValue, //Gets year
-            x.getDouble(1).round.toInt) //Gets prediction
+          Sale(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
+            x.getAs[SparseVector]("features").toArray(1).intValue, // Gets year
+            x.getDouble(1).round.toInt) // Gets prediction
       })
 
     WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_predictions")
   }
 
-  //Returns the model
-  //I've to research about this algorithm in order to properly configure the params
+  // Returns the model
+  // I've to research about this algorithm in order to properly configure the params
   def getModel(data: DataFrame): TrainValidationSplitModel = {
     val lr = new LinearRegression()
     val paramGrid = new ParamGridBuilder()
@@ -99,7 +99,7 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
       .setEvaluator(new RegressionEvaluator)
       .setEstimatorParamMaps(paramGrid)
     // 80% of the data will be used for training and the remaining 20% for validation.
-    //.setTrainRatio(0.8)
+    // .setTrainRatio(0.8)
 
     // Run train validation split, and choose the best set of parameters.
     trainValidationSplit.fit(data)
@@ -109,7 +109,7 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
     val date = Calendar.getInstance()
     date.add(Calendar.MONTH, -1)
     val months = 1.to(12).toArray
-    for (i <- months) yield { date.add(Calendar.MONTH, 1); (date.get(Calendar.MONTH) + 1, date.get(Calendar.YEAR)) }
+    for {i <- months} yield { date.add(Calendar.MONTH, 1); (date.get(Calendar.MONTH) + 1, date.get(Calendar.YEAR)) }
   }
 
 }

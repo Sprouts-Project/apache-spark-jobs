@@ -37,24 +37,24 @@ object CustomerSegmentationAgeAndBrand extends SparkJob {
   }
 
   override def validate(sc: SparkContext, config: Config): SparkJobValidation = {
-    SparkJobValid //Always valid
+    SparkJobValid // Always valid
   }
 
   def execute(sc: SparkContext): Any = {
     val sqlContext = SQLContext.getOrCreate(sc)
 
-    //Query to MySQL
+    // Query to MySQL
     val customers = ReadMySQL.read("""(
    SELECT `digital-music`.customer.id as customer_id, `digital-music`.customer.birthdate,
        `digital-music`.item.brand,
        `digital-music`.ordereditem.quantity
-FROM `digital-music`.ordereditem 
+FROM `digital-music`.ordereditem
 INNER JOIN `digital-music`.order_ ON `digital-music`.ordereditem.order_id = `digital-music`.order_.id
 INNER JOIN `digital-music`.customer ON `digital-music`.customer.id = `digital-music`.order_.customer_id
 INNER JOIN `digital-music`.item ON `digital-music`.item.id = `digital-music`.ordereditem.item_id
    ) AS data""", sqlContext).na.drop(Array("brand")).filter("brand != ''")
 
-    val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds) 
+    val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds)
     val conversion = 60 * 60 * 24 * 365 //   age to seconds conversion
 
     val brandsIndexes = customers.select("brand").distinct().rdd.map(_.getString(0)).zipWithIndex()
@@ -66,7 +66,7 @@ INNER JOIN `digital-music`.item ON `digital-music`.item.id = `digital-music`.ord
     val customersTuples = customers.select(customers.col("customer_id"), unix_timestamp(customers.col("birthdate")), customers.col("brand"), customers.col("quantity"))
       .map { x => ((x.getInt(0), ((today - x.getLong(1)) / conversion).intValue()), (x.getString(2), x.getInt(3))) }
 
-    //Map items to tupples (id, vector)
+    // Map items to tupples (id, vector)
     val rddCustomersVectors = customersTuples.map {
       x =>
         ((x._1._1, mapAgesToInterval(x._1._2.intValue())), (mapBrandIndexes.value.get(x._2._1).head.intValue(), x._2._2)) // Map (customer_id, age_interval) with values (brand index, quantity)
@@ -77,16 +77,16 @@ INNER JOIN `digital-music`.item ON `digital-music`.item.id = `digital-music`.ord
           (x._1._1, mapBrandsToFeatures(x._1._2, nBrands.value, x._2)) // Finally, map the list of (brand_index, quantity) to a vector
       }
 
-    val vectors = rddCustomersVectors.map(_._2) //gets the item vectors
+    val vectors = rddCustomersVectors.map(_._2) // Gets the customers vectors
 
-    //Sets the K-Means algorithms up
+    // Sets the K-Means algorithms up
     val numClusters = 5
     val numIterations = 100
     val clusters = KMeans.train(vectors, numClusters, numIterations)
 
-    //val WSSSE = clusters.computeCost(vectors) //WSSSE error
+    // val WSSSE = clusters.computeCost(vectors) //WSSSE error
 
-    //Calculates the centroids. Here, we obtain the customers profiles
+    // Calculates the centroids. Here, we obtain the customers profiles
     val centroids = sc.parallelize(clusters.clusterCenters)
       .map {
         x =>
@@ -111,30 +111,30 @@ INNER JOIN `digital-music`.item ON `digital-music`.item.id = `digital-music`.ord
 
   }
 
-  //Method for mapping item categories, with consist in a list of indexes, to a Vector.
+  // Method for mapping item categories, with consist in a list of indexes, to a Vector.
   def mapBrandsToFeatures(age: Int, brandSize: Int, brandTypes: List[(Int, Int)]): Vector = {
     var arr = Array.fill[Double](brandSize + 1)(0.0)
 
-    for (x <- brandTypes) arr(x._1) += x._2
+    for { x <- brandTypes } arr(x._1) += x._2
 
-    //Let's normalize it
+    // Let's normalize it
     val sum = arr.reduce(_ + _)
     if (sum > 0.0)
-      for (i <- 0 until arr.size) arr(i) = arr(i) / sum
+      for { i <- 0 until arr.size } arr(i) = arr(i) / sum
 
     arr(arr.size - 1) = age
     Vectors.dense(arr)
   }
 
-  //Method for mapping centroids with item profiles
+  // Method for mapping centroids with item profiles
   def mapCentroidToCustomerProfile(nameMapper: Map[Long, String], vector: Vector): (String, List[String]) = {
     val arrayVectors = vector.toArray
     val vectorBrandsSize = vector.toArray.size - 1
-    //val average = vector.toArray.slice(0, vectorBrandsSize).reduce(_+_)/vectorBrandsSize
-    //println(average)
-    //val brandsArray = arrayVectors.slice(0, arrayVectors.size - 1).zipWithIndex.filter(_._1 >= 0.1).map { x => nameMapper(x._2) }.toList
+    // val average = vector.toArray.slice(0, vectorBrandsSize).reduce(_+_)/vectorBrandsSize
+    // println(average)
+    // val brandsArray = arrayVectors.slice(0, arrayVectors.size - 1).zipWithIndex.filter(_._1 >= 0.1).map { x => nameMapper(x._2) }.toList
     val brandsArray = arrayVectors.slice(0, arrayVectors.size - 1).zipWithIndex.sortBy(_._1).reverse.take(7).map { x => nameMapper(x._2) }.toList // Returns the top 7 brands
-    //val brandsArray = List(nameMapper.get(arrayVectors.slice(0, arrayVectors.size - 1).zipWithIndex.maxBy(_._1)._2.longValue()).get)
+    // val brandsArray = List(nameMapper.get(arrayVectors.slice(0, arrayVectors.size - 1).zipWithIndex.maxBy(_._1)._2.longValue()).get)
 
     (mapAgesIntervalsToString(arrayVectors(arrayVectors.size - 1).intValue()), brandsArray)
   }
