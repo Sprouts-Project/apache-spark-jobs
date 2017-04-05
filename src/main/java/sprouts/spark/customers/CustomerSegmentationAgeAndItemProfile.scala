@@ -26,7 +26,7 @@ object CustomerSegmentationAgeAndItemProfile extends SparkJob {
   }
 
   override def validate(sc: SparkContext, config: Config): SparkJobValidation = {
-    SparkJobValid //Always valid
+    SparkJobValid // Always valid
   }
 
   def execute(sc: SparkContext): Any = {
@@ -46,7 +46,7 @@ INNER JOIN `digital-music`.customer ON `digital-music`.customer.id = `digital-mu
 
     val customersItemProf = customers.join(itemProfiles, "item_id")
 
-    val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds) 
+    val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds)
     val conversion = 60 * 60 * 24 * 365 // age to seconds conversion
 
     val mapItemProfileToCategories = sc.broadcast(itemProfiles.map { x => (x.getInt(3), x.getAs[List[String]](1).toArray) }.distinct().collectAsMap().toMap)
@@ -98,7 +98,7 @@ INNER JOIN `digital-music`.customer ON `digital-music`.customer.id = `digital-mu
   def mapCustomerToFeatures(age: Int, itemProfilesSize: Int, itemProfiles: List[(Int, Int)]): Vector = {
     var arr = Array.fill[Double](itemProfilesSize + 1)(0.0)
 
-    for (x <- itemProfiles) arr(x._1) += x._2
+    for {x <- itemProfiles} arr(x._1) += x._2
 
     // Let's normalize it
     val sum = arr.reduce(_ + _)
