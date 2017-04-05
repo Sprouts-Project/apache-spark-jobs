@@ -32,13 +32,13 @@ object SalesValuePredictions extends SparkJob {
   def execute(sc: SparkContext): Any = {
     val sqlContext = SQLContext.getOrCreate(sc)
 
-    val mySQLquery =
+   val mySQLquery =
       """
 (SELECT order_.totalPrice,
-       MONTH(order_.date) as month, YEAR(order_.date) as year
+       MONTH(order_.date) as month, YEAR(order_.date) as year 
 FROM order_ 
-AND order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
-AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
+WHERE order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
+ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
       """
 
     val df = ReadMySQL.read(mySQLquery, sqlContext).rdd
@@ -78,7 +78,7 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
         x =>
           SaleV(x.getAs[SparseVector]("features").toArray(0).intValue, //Gets month
             x.getAs[SparseVector]("features").toArray(1).intValue, //Gets year
-            x.getDouble(1).round.toInt) //Gets prediction
+            BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble) //Gets prediction and truncated to 2 decimals
       })
 
     WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_value_predictions")
