@@ -1,4 +1,4 @@
-package sprouts.spark.stock
+package sprouts.spark.finances
 
 import spark.jobserver.SparkJobValid
 import org.apache.spark.SparkContext
@@ -17,10 +17,10 @@ import org.apache.spark.ml.tuning.TrainValidationSplitModel
 import java.util.Calendar
 import sprouts.spark.utils.WriteMongoDB
 
-case class ItemVector(label: Double, features: SparseVector)
-case class Sale(month: Int, year: Int, sales: Int)
+case class ItemVectorValue(label: Double, features: SparseVector)
+case class SaleV(month: Int, year: Int, salesValue: Double)
 
-object SalesPredictions extends SparkJob {
+object SalesValuePredictions extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
     execute(sc)
   }
@@ -32,22 +32,22 @@ object SalesPredictions extends SparkJob {
   def execute(sc: SparkContext): Any = {
     val sqlContext = SQLContext.getOrCreate(sc)
 
-    val mySQLquery =
+   val mySQLquery =
       """
-(SELECT ordereditem.quantity,
+(SELECT order_.totalPrice,
        MONTH(order_.date) as month, YEAR(order_.date) as year
-FROM ordereditem
-INNER JOIN order_ ON ordereditem.order_id = order_.id AND order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
-AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
+FROM order_
+WHERE order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
+ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
       """
 
     val df = ReadMySQL.read(mySQLquery, sqlContext).rdd
-      .map { x => ((x.getLong(1), x.getLong(2)), x.getInt(0)) } // Map ( (month, year), sales). (month, year) as key
+      .map { x => ((x.getLong(1), x.getLong(2)), x.getDouble(0)) } // Map ( (month, year), sales). (month, year) as key
       .reduceByKey(_ + _) // We obtain the sales for each month
       .map {
         x => // Map each ((month,year),sales) with a vector, with consists of (label=sales, features=(month,year))
           // SparseVector: 2 = number of features, (0, 1) = indexes
-          ItemVector(x._2.doubleValue(), new SparseVector(2, Array(0, 1), Array(x._1._1.doubleValue(), x._1._2.doubleValue())))
+          ItemVectorValue(x._2.doubleValue(), new SparseVector(2, Array(0, 1), Array(x._1._1.doubleValue(), x._1._2.doubleValue())))
       }
 
     // Let's create a dataframe of label and features
@@ -62,7 +62,7 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
         .parallelize(getDates())
         .map {
           x =>
-            ItemVector(0.0, new SparseVector(2, Array(0, 1), Array(x._1.toDouble, x._2.toDouble)))
+            ItemVectorValue(0.0, new SparseVector(2, Array(0, 1), Array(x._1.toDouble, x._2.toDouble)))
         })
 
     // Make predictions on test data. model is the model with combination of parameters
@@ -74,12 +74,12 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
     val salesPred = sqlContext.createDataFrame(
       pred.rdd.map {
         x =>
-          Sale(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
+          SaleV(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
             x.getAs[SparseVector]("features").toArray(1).intValue, // Gets year
-            x.getDouble(1).round.toInt) // Gets prediction
+            BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble) // Gets prediction and truncated to 2 decimals
       })
 
-    WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_predictions")
+    WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_value_predictions")
   }
 
   // Returns the model
@@ -98,8 +98,6 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
       .setEstimator(lr)
       .setEvaluator(new RegressionEvaluator)
       .setEstimatorParamMaps(paramGrid)
-    // 80% of the data will be used for training and the remaining 20% for validation.
-    // .setTrainRatio(0.8)
 
     // Run train validation split, and choose the best set of parameters.
     trainValidationSplit.fit(data)

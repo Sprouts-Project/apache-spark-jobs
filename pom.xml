@@ -4,7 +4,7 @@
 
 	<groupId>sprouts</groupId>
 	<artifactId>spark</artifactId>
-	<version>0.0.1</version>
+	<version>0.1.0</version>
 	<packaging>jar</packaging>
 
 	<name>apache-spark-jobs</name>
@@ -100,6 +100,12 @@
 			<groupId>org.mongodb</groupId>
 			<artifactId>mongo-java-driver</artifactId>
 			<version>3.4.2</version>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/com.github.scala-incubator.io/scala-io-file_2.10 -->
+		<dependency>
+			<groupId>com.github.scala-incubator.io</groupId>
+			<artifactId>scala-io-file_2.10</artifactId>
+			<version>0.4.3</version>
 		</dependency>
 
 	</dependencies>

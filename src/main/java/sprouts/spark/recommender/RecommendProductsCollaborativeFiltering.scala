@@ -13,7 +13,6 @@ import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
 
 case class Recommendation(customer_id: Int, items: Array[Rating])
 
-
 object RecommendProductsCollaborativeFiltering extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
     val user = jobConfig.getString("input.string").toInt
@@ -21,10 +20,10 @@ object RecommendProductsCollaborativeFiltering extends SparkJob {
   }
 
   override def validate(sc: SparkContext, config: Config): SparkJobValidation = {
-    SparkJobValid //Always valid
+    SparkJobValid // Always valid
   }
 
-  def execute(sc: SparkContext, user:Int): Any = {
+  def execute(sc: SparkContext, user: Int): Any = {
     val model = MatrixFactorizationModel.load(sc, "/data/jobserver/models")
     model.recommendProducts(user, 20)
   }

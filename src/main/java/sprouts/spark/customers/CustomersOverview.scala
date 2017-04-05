@@ -37,17 +37,17 @@ object CustomersOverview extends SparkJob {
   }
 
   override def validate(sc: SparkContext, config: Config): SparkJobValidation = {
-    SparkJobValid //Always valid
+    SparkJobValid // Always valid
   }
 
   def execute(sc: SparkContext): Any = {
     val sqlContext = SQLContext.getOrCreate(sc)
 
-    //Query to MySQL
+    // Query to MySQL
     val customers = ReadMySQL.read("(SELECT * FROM customer) AS data", sqlContext)
 
-    val today = Calendar.getInstance().getTimeInMillis() / 1000 //current unix timestamp (seconds) 
-    val conversion = 60 * 60 * 24 * 365 //age to seconds conversion
+    val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds)
+    val conversion = 60 * 60 * 24 * 365 // age to seconds conversion
 
     val customersAge = customers.select(unix_timestamp(customers.col("birthdate")))
       .map { x => (((today - x.getLong(0)) * 1.0 / conversion)) }
@@ -75,11 +75,11 @@ object CustomersOverview extends SparkJob {
       .mapValues { case (sum, count) => sum / count }
       .collect()
 
-    //DF to save in MongoDB
+    // DF to save in MongoDB
     val customerOverview =
       sqlContext.createDataFrame(List(CustomerOverview(averageAge, averageAgeMale, averageAgeFemale, averageAgeByState, customersByState)))
 
-    //We finally persist the DF into MongoDB to extract it from the dashboard
+    // We finally persist the DF into MongoDB to extract it from the dashboard
     WriteMongoDB.deleteAndPersistDF(customerOverview, sqlContext, "customer_overview")
     customerOverview.collect()
 

@@ -15,6 +15,6 @@ object HelloWorld extends SparkJob {
   }
 
   override def validate(sc: SparkContext, config: Config): SparkJobValidation = {
-    SparkJobValid //Always valid
+    SparkJobValid // Always valid
   }
 }
