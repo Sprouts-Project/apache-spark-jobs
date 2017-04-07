@@ -46,7 +46,7 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
       """
 
     val main_df = ReadMySQL.read(mySQLquery, sqlContext).rdd
-      .map { x => ((x.getLong(1), x.getLong(2),x.getInt(3),x.getString(4)), x.getInt(0)) } //Map ( (month, year, itemId), sales). (month, year) as key
+      .map { x => ((x.getLong(1), x.getLong(2),x.getInt(3),x.getString(4)), x.getInt(0)) } // Map ( (month, year, itemId), sales). (month, year) as key
 
     val items = main_df.map{x => x._1}.map{x => (x._3,x._4)}.distinct().zipWithIndex()
     val mapItemToIndex = sc.broadcast(items.collectAsMap.toMap)
@@ -83,7 +83,7 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
     val salesPred = sqlContext.createDataFrame(
       pred.rdd.map {
         x =>
-          SaleByItem(x.getAs[SparseVector]("features").toArray(0).intValue, //G ets month
+          SaleByItem(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
             x.getAs[SparseVector]("features").toArray(1).intValue, // Gets year
             mapIndexToItem.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get._1, // Get item id
                         mapIndexToItem.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get._2, // Get item name
