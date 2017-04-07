@@ -51,10 +51,10 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data""", sqlContext)
         soldDuringLastSix.col("brand"),soldDuringLastSix.col("description"),soldDuringLastSix.col("imUrl"),
         soldDuringLastSix.col("price"),soldDuringLastSix.col("title"),soldDuringLastSix.col("quantity"))
       .map { x => ((x.getInt(0),x.getString(1),x.getString(2),x.getString(3),x.getDouble(4),x.getString(5)),x.getInt(6)) }
-    .reduceByKey(_ + _) 
-    .sortBy(_._2, false)
+    .reduceByKey(_ + _)
+    .sortBy(_._2, false) // Sort descending by value
     .take(50)
-    
+
 // DF to save in MongoDB
     val mostSoldDuringLastSix =
       sqlContext.createDataFrame(
