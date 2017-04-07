@@ -51,7 +51,7 @@ AND review.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data""", sqlContext)
         reviewedDuringLastSix.col("price"),reviewedDuringLastSix.col("title"),reviewedDuringLastSix.col("overall"))
       .map { x => ((x.getInt(0),x.getString(1),x.getString(2),x.getString(3),x.getDouble(4),x.getString(5)),(x.getDouble(6),1)) }
     .reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2)) // Accumulate values ​​of value
-    .mapValues { case (sum, count) => sum / count } // First value of tuple/Second value of tuple 
+    .mapValues { case (sum, count) => sum / count } // First value of tuple/Second value of tuple
     .sortBy(_._2, false) // Sort descending by value
     .take(50)
 
