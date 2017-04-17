@@ -28,8 +28,11 @@ import com.mongodb.spark.MongoSpark
 import com.mongodb.spark.config.WriteConfig
 import sprouts.spark.utils.WriteMongoDB
 import sprouts.spark.utils.ReadMySQL
+import sprouts.spark.utils.ReadMongoDB
 
-case class CustomerOverview(average_age: Double, average_age_male: Double, average_age_female: Double, average_age_by_state: Array[(String, Double)], customers_by_state: Array[(String, Int)])
+case class CustomerOverview(average_age: Double, average_age_male: Double, average_age_female: Double, average_age_by_state: Array[AverageAgeByState], customers_by_state: Array[CustomersByState])
+case class AverageAgeByState(name: String, abbreviaton: String, age: Double)
+case class CustomersByState(name: String, abbreviaton: String, totalCustomers: Int)
 
 object CustomersOverview extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -45,7 +48,12 @@ object CustomersOverview extends SparkJob {
 
     // Query to MySQL
     val customers = ReadMySQL.read("(SELECT * FROM customer) AS data", sqlContext)
-
+    val mapStatesNames = sc.broadcast(ReadMongoDB.read(sqlContext, "map_state_name_abbreviation")
+      .select("name", "abbreviation")
+      .map { x => (x.getString(0), x.getString(1)) } // maps (state_name, abbreviation)
+      .collectAsMap().toMap // convert it to a map
+    )
+    
     val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds)
     val conversion = 60 * 60 * 24 * 365 // age to seconds conversion
 
@@ -67,12 +75,14 @@ object CustomersOverview extends SparkJob {
     val customersByState = customers.select(customers.col("state"))
       .map { x => (x.getString(0), 1) }
       .reduceByKey(_ + _)
+      .map{ x => CustomersByState(x._1, "US-"+mapStatesNames.value.get(x._1).get, x._2) }
       .collect()
 
     val averageAgeByState = customers.select(customers.col("state"), unix_timestamp(customers.col("birthdate")))
       .map { x => (x.getString(0), ((((today - x.getLong(1)) * 1.0 / conversion), 1))) }
       .reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2))
       .mapValues { case (sum, count) => sum / count }
+      .map{ x => AverageAgeByState(x._1, "US-"+mapStatesNames.value.get(x._1).get, x._2) }
       .collect()
 
     // DF to save in MongoDB
