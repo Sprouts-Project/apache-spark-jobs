@@ -27,7 +27,7 @@ import sprouts.spark.utils.ReadMySQL
 import org.apache.spark.sql.functions._
 
 case class AlsoBoughtRecommender(item_id: Int, alsoBought: List[RecommendedAndQuantity])
-case class RecommendedAndQuantity(item_id: Int, quantity: Long)
+case class RecommendedAndQuantity(item_id: Int, title: String, brand: String, imUrl:String, quantity: Long)
 
 object AlsoBoughtRecommender extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -42,33 +42,35 @@ object AlsoBoughtRecommender extends SparkJob {
     val sqlContext = SQLContext.getOrCreate(sc)
 
     // Query to MySQL
-    val df = ReadMySQL.read("""(SELECT ordereditem.item_id , ordereditem.order_id ,ordereditem.quantity
-        FROM `digital-music`.ordereditem 
+    val df = ReadMySQL.read("""(SELECT ordereditem.item_id , ordereditem.order_id ,ordereditem.quantity, item.title, item.brand, item.imUrl
+        FROM `digital-music`.ordereditem
+        INNER JOIN item ON ordereditem.item_id = item.id
        ) AS data""", sqlContext)
     // self join each item on the corresponding ordereditem
     // then, it groups by pairs item_id, r_item_id, and finally aggregate by sum of quantities
     // as a result, it returns item_id, r_item_id, and sum of quantities
-    val results = df.join(df.select(col("item_id").alias("r_item_id"), col("order_id").alias("r_order_id"), col("quantity").alias("weight")), col("order_id") === col("r_order_id") and col("item_id").notEqual(col("r_item_id")))
+    val results = df.join(df.select(col("item_id").alias("r_item_id"), col("order_id").alias("r_order_id"), col("quantity").alias("weight"),
+        col("title").alias("r_title"),col("brand").alias("r_brand"),col("imUrl").alias("r_imUrl")), col("order_id") === col("r_order_id") and col("item_id").notEqual(col("r_item_id")))
       .groupBy(
-        col("item_id"), col("r_item_id")).agg(
+        col("item_id"), col("r_item_id"),col("r_title"),col("r_brand"),col("r_imUrl")).agg(
            sum(col("weight")))
     
     // for each item, aggregate by item id, having as value the recommended item and a list indicating the total quantity also bought
-    val pri = results.select(results.col("item_id"), results.col("r_item_id"), results.col("sum(weight)"))
-      .map { x => (x.getInt(0), RecommendedAndQuantity(x.getInt(1), x.getLong(2))) }
+    val recommend = results.select(results.col("item_id"), results.col("r_item_id"),results.col("r_title"),results.col("r_brand"),results.col("r_imUrl"), results.col("sum(weight)"))
+      .map { x => (x.getInt(0), RecommendedAndQuantity(x.getInt(1),x.getString(2),x.getString(3),x.getString(4), x.getLong(5))) }
       .aggregateByKey(List[RecommendedAndQuantity]())(_ ++ List(_), _ ++ _)
 
     // DF to save in MongoDB
-    val test =
+    val alsoB =
       sqlContext.createDataFrame(
-        pri.map {
+        recommend.map {
           x =>
             AlsoBoughtRecommender(x._1, x._2)
         })
 
     // We finally persist the DF into MongoDB to extract it from the dashboard
-    WriteMongoDB.deleteAndPersistDF(test, sqlContext, "also_bought_recommender")
-    test.collect()
+    WriteMongoDB.deleteAndPersistDF(alsoB, sqlContext, "also_bought_recommender")
+    alsoB.collect()
 
   }
 }
