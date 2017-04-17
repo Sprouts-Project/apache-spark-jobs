@@ -26,7 +26,8 @@ import sprouts.spark.utils.WriteMongoDB
 import sprouts.spark.utils.ReadMySQL
 import org.apache.spark.sql.functions._
 
-case class AlsoBoughtRecommender(itemID: Int, alsoBought: List[(Int, Long)])
+case class AlsoBoughtRecommender(item_id: Int, alsoBought: List[RecommendedAndQuantity])
+case class RecommendedAndQuantity(item_id: Int, quantity: Long)
 
 object AlsoBoughtRecommender extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -44,16 +45,18 @@ object AlsoBoughtRecommender extends SparkJob {
     val df = ReadMySQL.read("""(SELECT ordereditem.item_id , ordereditem.order_id ,ordereditem.quantity
         FROM `digital-music`.ordereditem 
        ) AS data""", sqlContext)
-
+    // self join each item on the corresponding ordereditem
+    // then, it groups by pairs item_id, r_item_id, and finally aggregate by sum of quantities
+    // as a result, it returns item_id, r_item_id, and sum of quantities
     val results = df.join(df.select(col("item_id").alias("r_item_id"), col("order_id").alias("r_order_id"), col("quantity").alias("weight")), col("order_id") === col("r_order_id") and col("item_id").notEqual(col("r_item_id")))
       .groupBy(
         col("item_id"), col("r_item_id")).agg(
-          col("item_id"), col("r_item_id"), sum(col("weight")))
-
-    print("Primera fase")
+           sum(col("weight")))
+    
+    // for each item, aggregate by item id, having as value the recommended item and a list indicating the total quantity also bought
     val pri = results.select(results.col("item_id"), results.col("r_item_id"), results.col("sum(weight)"))
-      .map { x => (x.getInt(0), (x.getInt(1), x.getLong(2))) }
-      .aggregateByKey(List[(Int, Long)]())(_ ++ List(_), _ ++ _)
+      .map { x => (x.getInt(0), RecommendedAndQuantity(x.getInt(1), x.getLong(2))) }
+      .aggregateByKey(List[RecommendedAndQuantity]())(_ ++ List(_), _ ++ _)
 
     // DF to save in MongoDB
     val test =
