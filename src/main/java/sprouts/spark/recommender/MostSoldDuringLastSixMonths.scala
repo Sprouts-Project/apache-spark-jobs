@@ -44,8 +44,8 @@ object MostSoldDuringLAstSixMonths extends SparkJob {
 FROM ordereditem
 INNER JOIN `digital-music`.order_ ON `digital-music`.ordereditem.order_id=`digital-music`.order_.id
 INNER JOIN `digital-music`.item ON `digital-music`.ordereditem.item_id=`digital-music`.item.id
-AND order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 6 MONTH)
-AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data""", sqlContext)
+AND order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-%d'), INTERVAL 6 MONTH)
+AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-%d')) AS data""", sqlContext)
 
     val top50MostSoldDuringLastSix = soldDuringLastSix.select(soldDuringLastSix.col("id"),
         soldDuringLastSix.col("brand"),soldDuringLastSix.col("description"),soldDuringLastSix.col("imUrl"),
