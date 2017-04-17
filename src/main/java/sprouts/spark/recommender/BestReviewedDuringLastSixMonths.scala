@@ -27,7 +27,7 @@ import sprouts.spark.utils.ReadMySQL
 
 case class top50ReviewedDuringLastSixMonths(item_id:Int, item_brand:String, item_description:String, item_imUrl:String, item_price:Double, item_title:String, averageOverall:Double)
 
-object BetterReviewedDuringLastSixMonths extends SparkJob {
+object BestReviewedDuringLastSixMonths extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
     execute(sc)
   }
@@ -43,10 +43,10 @@ object BetterReviewedDuringLastSixMonths extends SparkJob {
     val reviewedDuringLastSix = ReadMySQL.read("""(SELECT item.*,review.overall
 FROM review
 INNER JOIN `digital-music`.item ON `digital-music`.review.item_id=`digital-music`.item.id
-AND review.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 6 MONTH)
-AND review.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data""", sqlContext)
+AND review.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-%d'), INTERVAL 6 MONTH)
+AND review.date < DATE_FORMAT(NOW() ,'%Y-%m-%d')) AS data""", sqlContext)
 
-    val top50BetterReviewedDuringLastSix = reviewedDuringLastSix.select(reviewedDuringLastSix.col("id"),
+    val top50BestReviewedDuringLastSix = reviewedDuringLastSix.select(reviewedDuringLastSix.col("id"),
         reviewedDuringLastSix.col("brand"),reviewedDuringLastSix.col("description"),reviewedDuringLastSix.col("imUrl"),
         reviewedDuringLastSix.col("price"),reviewedDuringLastSix.col("title"),reviewedDuringLastSix.col("overall"))
       .map { x => ((x.getInt(0),x.getString(1),x.getString(2),x.getString(3),x.getDouble(4),x.getString(5)),(x.getDouble(6),1)) }
@@ -54,17 +54,17 @@ AND review.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data""", sqlContext)
     .mapValues { case (sum, count) => sum / count } // First value of tuple/Second value of tuple
     .sortBy(_._2, false) // Sort descending by value
     .take(50)
-
+    // TODO: change the algorithm
 // DF to save in MongoDB
-    val bettersReviewedDuringLastSix =
+    val bestsReviewedDuringLastSix =
       sqlContext.createDataFrame(
-        top50BetterReviewedDuringLastSix.map {
+        top50BestReviewedDuringLastSix.map {
           x =>
            top50ReviewedDuringLastSixMonths(x._1._1,x._1._2,x._1._3,x._1._4,x._1._5,x._1._6,x._2) // Map each ellement in RDD with an ItemProfile
         })
 
-    // We finally persist the DF into MongoDB to extract it from the dashboard
-    WriteMongoDB.deleteAndPersistDF(bettersReviewedDuringLastSix, sqlContext, "better_reviewed_during_last_six_months")
-    bettersReviewedDuringLastSix.collect()
+    // We finally persist the DF into MongoDB to extract it from the application
+    WriteMongoDB.deleteAndPersistDF(bestsReviewedDuringLastSix, sqlContext, "best_reviewed_during_last_six_months")
+    bestsReviewedDuringLastSix.collect()
   }
 }
