@@ -31,8 +31,8 @@ import sprouts.spark.utils.ReadMySQL
 import sprouts.spark.utils.ReadMongoDB
 
 case class CustomerOverview(average_age: Double, average_age_male: Double, average_age_female: Double, average_age_by_state: Array[AverageAgeByState], customers_by_state: Array[CustomersByState])
-case class AverageAgeByState(name: String, abbreviaton: String, age: Double)
-case class CustomersByState(name: String, abbreviaton: String, totalCustomers: Int)
+case class AverageAgeByState(name: String, abbreviation: String, age: Double)
+case class CustomersByState(name: String, abbreviation: String, totalCustomers: Int)
 
 object CustomersOverview extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
