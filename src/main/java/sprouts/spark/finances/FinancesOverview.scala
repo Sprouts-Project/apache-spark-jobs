@@ -11,8 +11,8 @@ import sprouts.spark.utils.ReadMySQL
 import sprouts.spark.utils.WriteMongoDB
 import sprouts.spark.utils.ReadMongoDB
 
-case class SaleValue(month: Int, year: Int, SalesValue: Double)
-case class SaleValueByState(month: Int, year: Int, salesValue: Double, state: String, abbreviation:String)
+case class SaleValue(month: Int, year: Int, value: Double)
+case class SaleValueByState(month: Int, year: Int, value: Double, state: String, abbreviation:String)
 case class FinacesOverview(monthly_sales: Array[SaleValue], monthly_sales_by_state: Array[SaleValueByState])
 
 object FinancesOverview extends SparkJob {
