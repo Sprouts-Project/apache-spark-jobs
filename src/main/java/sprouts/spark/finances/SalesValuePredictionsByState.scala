@@ -16,9 +16,10 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.ml.tuning.TrainValidationSplitModel
 import java.util.Calendar
 import sprouts.spark.utils.WriteMongoDB
+import sprouts.spark.utils.ReadMongoDB
 
 case class ItemVectorValueByState(label: Double, features: SparseVector)
-case class SaleVByState(month: Int, year: Int, state: String, salesValue: Double)
+case class SaleVByState(month: Int, year: Int, state: String, salesValue: Double, abbreviation:String)
 
 object SalesValuePredictionsByState extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -49,6 +50,12 @@ AND order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
     val mapStateIdToIndex = sc.broadcast(statesIds.collectAsMap.toMap) // State mapped to index
     val mapIndexToStateId = sc.broadcast(statesIds.map(_.swap).collectAsMap().toMap) // index mapped to State
 
+    val mapStatesNames = sc.broadcast(ReadMongoDB.read(sqlContext, "map_state_name_abbreviation")
+      .select("name", "abbreviation")
+      .map { x => (x.getString(0), x.getString(1)) } // maps (state_name, abbreviation)
+      .collectAsMap().toMap // convert it to a map
+    )
+    
     val df = main_df.reduceByKey(_ + _) // We obtain the sales for each month
       .map {
         x => // Map each ((month,year,state),sales) with a vector, with consists of (label=sales, features=(month,year))
@@ -83,7 +90,9 @@ AND order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
           SaleVByState(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
             x.getAs[SparseVector]("features").toArray(1).intValue, // Gets year
             mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get, // Gets state
-            BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble) // Gets prediction and truncated to 2 decimals
+            BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble, // Gets prediction and truncate it to 2 decimals
+            "US-"+mapStatesNames.value.get(mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get).get // sets the state abbreviation
+          )
       })
 
     WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_value_predictions_by_state")
