@@ -43,13 +43,14 @@ INNER JOIN `digital-music`.customer ON `digital-music`.customer.id = `digital-mu
    ) AS data""", sqlContext)
 
     val itemProfiles = ReadMongoDB.read(sqlContext, "item_profile_item_id_map")
-
+      .select("categories", "item_id", "profile_id")
+        
     val customersItemProf = customers.join(itemProfiles, "item_id")
 
     val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds)
     val conversion = 60 * 60 * 24 * 365 // age to seconds conversion
 
-    val mapItemProfileToCategories = sc.broadcast(itemProfiles.map { x => (x.getInt(3), x.getAs[List[String]](1).toArray) }.distinct().collectAsMap().toMap)
+    val mapItemProfileToCategories = sc.broadcast(itemProfiles.map { x => (x.getInt(2), x.getAs[List[String]](0).toArray) }.distinct().collectAsMap().toMap)
     val nItemProfiles = sc.broadcast(mapItemProfileToCategories.value.keys.size)
 
     val customerTuples = customersItemProf.select(customersItemProf.col("customer_id"), unix_timestamp(customersItemProf.col("birthdate")), customersItemProf.col("profile_id"), customersItemProf.col("quantity"))
