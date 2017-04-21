@@ -45,17 +45,24 @@ FROM review
 INNER JOIN `digital-music`.item ON `digital-music`.review.item_id=`digital-music`.item.id
 AND review.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-%d'), INTERVAL 6 MONTH)
 AND review.date < DATE_FORMAT(NOW() ,'%Y-%m-%d')) AS data""", sqlContext)
+    
 
+    val m = 1    
+
+    val C = reviewedDuringLastSix.select("overall").map { x => x.getDouble(0) }.mean
+    
+    println("MEDIA: "+ C)
+    
     val top50BestReviewedDuringLastSix = reviewedDuringLastSix.select(reviewedDuringLastSix.col("id"),
         reviewedDuringLastSix.col("brand"),reviewedDuringLastSix.col("description"),reviewedDuringLastSix.col("imUrl"),
         reviewedDuringLastSix.col("price"),reviewedDuringLastSix.col("title"),reviewedDuringLastSix.col("overall"))
       .map { x => ((x.getInt(0),x.getString(1),x.getString(2),x.getString(3),x.getDouble(4),x.getString(5)),(x.getDouble(6),1)) }
     .reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2)) // Accumulate values ​​of value
-    .mapValues { case (sum, count) => sum / count } // First value of tuple/Second value of tuple
+    .mapValues { case (sum, count) => (1.0/(count + m))*((count*(sum / count))+(m*C))} // Applies this formula: 1/count+min_revs * (count*avg_overall + min_revs*avg_all_revs)
     .sortBy(_._2, false) // Sort descending by value
     .take(50)
-    // TODO: change the algorithm
-// DF to save in MongoDB
+
+    // DF to save in MongoDB
     val bestsReviewedDuringLastSix =
       sqlContext.createDataFrame(
         top50BestReviewedDuringLastSix.map {

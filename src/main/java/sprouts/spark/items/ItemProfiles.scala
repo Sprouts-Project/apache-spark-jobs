@@ -26,7 +26,9 @@ import sprouts.spark.utils.ReadMySQL
 import sprouts.spark.stock.ItemVector
 
 case class ItemProfile(profile_id: Int, number_items: Long, categories: List[String])
-case class ItemProfileMappedToItem(profile_id: Int, item_id: Int, categories: List[String])
+case class ItemProfileMappedToItem(profile_id: Int, item_id: Int, categories: List[String], item_brand:String, item_description:String, item_imUrl:String, item_price:Double, item_title:String)
+
+//case class ItemProfileMappedToItem(profile_id: Int, item_id: Int, categories: List[String])
 
 object ItemProfiles extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -42,8 +44,8 @@ object ItemProfiles extends SparkJob {
 
     // Query to MySQL
     val categories = ReadMySQL.read("(SELECT id, name FROM category) AS data", sqlContext).rdd.map { x => (x.getInt(0), x.getString(1)) }
-    val itemCats = ReadMySQL.read("(SELECT * FROM item_category) AS data", sqlContext)
-
+    val itemCats = ReadMySQL.read("(SELECT items_id, categories_id, brand, description, imUrl, price, title FROM item_category INNER JOIN item ON item.id = item_category.items_id) AS data", sqlContext)
+    itemCats.show()
     // Map categories with unique index and broadcast through SparkContext
     val categoriesIds = categories.map { x => x._1 }.zipWithIndex()
     val mapCatIdToIndex = sc.broadcast(categoriesIds.collectAsMap.toMap)
@@ -53,7 +55,10 @@ object ItemProfiles extends SparkJob {
     val mapCatIdToStr = sc.broadcast(categories.collectAsMap().toMap)
     // Gets the number of categories
     val nCategories = sc.broadcast(categoriesIds.count().intValue())
-
+    
+    // Map item id to brand, description, imUrl, price and title
+    val mapItemToInfo = sc.broadcast(itemCats.map { x => (x.getInt(0), (x.getString(2), x.getString(3), x.getString(4), x.getDouble(5), x.getString(6)))}.collectAsMap.toMap)
+    
     // Map items to tupples (id, vector)
     val rddItemIdVectors = itemCats.rdd.map {
       x =>
@@ -92,7 +97,7 @@ object ItemProfiles extends SparkJob {
 
     val itemProfileItemIdMap = sqlContext.createDataFrame(
       itemMappedToProfile.map(_.swap).join(centroids) // (centroid[item_profile], (item id, cats))
-        .map { x => ItemProfileMappedToItem(x._1, x._2._1, x._2._2) })
+        .map { x => ItemProfileMappedToItem(x._1, x._2._1, x._2._2, mapItemToInfo.value.get(x._2._1).get._1, mapItemToInfo.value.get(x._2._1).get._2, mapItemToInfo.value.get(x._2._1).get._3, mapItemToInfo.value.get(x._2._1).get._4, mapItemToInfo.value.get(x._2._1).get._5) })
 
     val numItemsByProfile = itemMappedToProfile.map {
       x =>
