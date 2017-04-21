@@ -16,11 +16,12 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.ml.tuning.TrainValidationSplitModel
 import java.util.Calendar
 import sprouts.spark.utils.WriteMongoDB
+import sprouts.spark.utils.ReadMongoDB
 
 case class ItemVectorByState(label: Double, features: SparseVector)
-case class SaleByState(month: Int, year: Int, state: String, sales: Int)
+case class SaleByState(month: Int, year: Int, state: String, sales: Int, abbreviation:String)
 
-object SalesPredictionsBySate extends SparkJob {
+object SalesPredictionsByState extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
     execute(sc)
   }
@@ -50,6 +51,12 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
     val mapStateIdToIndex = sc.broadcast(statesIds.collectAsMap.toMap) // State mapped to index
     val mapIndexToStateId = sc.broadcast(statesIds.map(_.swap).collectAsMap().toMap) // index mapped to State
 
+    val mapStatesNames = sc.broadcast(ReadMongoDB.read(sqlContext, "map_state_name_abbreviation")
+      .select("name", "abbreviation")
+      .map { x => (x.getString(0), x.getString(1)) } // maps (state_name, abbreviation)
+      .collectAsMap().toMap // convert it to a map
+    )
+    
     val df = main_df.reduceByKey(_ + _) // We obtain the sales for each month
       .map {
         x => // Map each ((month,year, state),sales) with a vector, with consists of (label=sales, features=(month,year, state_index (mapped)))
@@ -84,7 +91,9 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
           SaleByState(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
             x.getAs[SparseVector]("features").toArray(1).intValue, // Gets year
             mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get, // Gets state
-            x.getDouble(1).round.toInt) // Gets prediction
+            x.getDouble(1).round.toInt, // Gets prediction
+            "US-"+mapStatesNames.value.get(mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get).get // sets the state abbreviation
+          ) 
       })
 
     WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_predictions_by_state")
