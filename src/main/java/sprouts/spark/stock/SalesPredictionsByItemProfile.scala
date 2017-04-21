@@ -45,16 +45,16 @@ object SalesPredictionsByItemProfile extends SparkJob {
       """,sqlContext)
 
    val itemProfiles = ReadMongoDB.read(sqlContext, "item_profile_item_id_map")
-
-   val df_itemProfiles = df.join(itemProfiles,"item_id").rdd
-      .map { x => ((x.getLong(2), x.getLong(3), x.getInt(6)), x.getInt(0)) } // Map ( (month, year, itemProfileId), sales). (month, year) as key
-      .reduceByKey(_ + _) // We obtain the sales for each month
-      .map {
+   
+   val df_itemProfiles = df.join(itemProfiles,"item_id")
+    .map { x => ((x.getLong(2), x.getLong(3), x.getInt(11)), x.getInt(1)) } // Map ( (month, year, itemProfileId), sales). (month, year) as key
+    .reduceByKey(_ + _) // We obtain the sales for each month
+    .map {
         x => // Map each ((month,year),sales) with a vector, with consists of (label=sales, features=(month,year))
-          // SparseVector: 2 = number of features, (0, 1) = indexes
+          // SparseVector: 3 = number of features, (0, 1, 2) = indexes
           ItemVectorByItemProfile(x._2.doubleValue(), new SparseVector(3, Array(0, 1, 2), Array(x._1._1.doubleValue(), x._1._2.doubleValue(), x._1._3.doubleValue())))
-      }
-
+    }
+        
     // Let's create a dataframe of label and features
     val data = sqlContext.createDataFrame(df_itemProfiles).na.drop()
 
@@ -63,7 +63,7 @@ object SalesPredictionsByItemProfile extends SparkJob {
     // Get the dataframe with ItemVectors representing next 12 months
     val toPredict = sqlContext.createDataFrame(
       sc
-        .parallelize(getDates(itemProfiles.rdd.map{x => x.getInt(3)}.distinct().collect())
+        .parallelize(getDates(itemProfiles.rdd.map{x => x.getInt(8)}.distinct().collect()) // pass the item_profile id to generate the vectors to predict
         .map {
           x =>
             ItemVectorByItemProfile(0.0, new SparseVector(3, Array(0, 1, 2), Array(x._1.toDouble, x._2.toDouble,x._3.toDouble)))
@@ -110,12 +110,12 @@ object SalesPredictionsByItemProfile extends SparkJob {
     trainValidationSplit.fit(data)
   }
 
-  def getDates(states : Array[Int]): Array[(Int, Int, Int)] = {
+  def getDates(itemProfiles : Array[Int]): Array[(Int, Int, Int)] = {
     val date = Calendar.getInstance()
     date.add(Calendar.MONTH, -1)
     val months = 1.to(12).toArray
     val res = for {i <- months} yield { date.add(Calendar.MONTH, 1); (date.get(Calendar.MONTH) + 1, date.get(Calendar.YEAR)) }
-    for {i <- res; s <-states} yield { (i._1,i._2, s) }
+    for {i <- res; ip <-itemProfiles} yield { (i._1,i._2, ip) }
   }
 
 }
