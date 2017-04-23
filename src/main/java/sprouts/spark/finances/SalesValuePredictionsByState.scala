@@ -1,25 +1,29 @@
 package sprouts.spark.finances
 
-import spark.jobserver.SparkJobValid
+import java.util.Calendar
+
 import org.apache.spark.SparkContext
-import spark.jobserver.SparkJobValidation
-import org.apache.spark.sql.SQLContext
-import com.typesafe.config.Config
-import spark.jobserver.SparkJob
-import sprouts.spark.utils.ReadMySQL
-import org.apache.spark.mllib.linalg.SparseVector
-import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.tuning.ParamGridBuilder
 import org.apache.spark.ml.tuning.TrainValidationSplit
-import org.apache.spark.sql.DataFrame
 import org.apache.spark.ml.tuning.TrainValidationSplitModel
-import java.util.Calendar
-import sprouts.spark.utils.WriteMongoDB
+import org.apache.spark.mllib.linalg.SparseVector
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.SQLContext
+
+import com.typesafe.config.Config
+
+import spark.jobserver.SparkJob
+import spark.jobserver.SparkJobValid
+import spark.jobserver.SparkJobValidation
 import sprouts.spark.utils.ReadMongoDB
+import sprouts.spark.utils.ReadMySQL
+import sprouts.spark.utils.WriteMongoDB
 
 case class ItemVectorValueByState(label: Double, features: SparseVector)
-case class SaleVByState(month: Int, year: Int, state: String, salesValue: Double, abbreviation:String)
+case class SalesVByState(month: Int, year: Int, statesSales: List[StateSalesV])
+case class StateSalesV(state: String, sales: Double, abbreviation:String)
 
 object SalesValuePredictionsByState extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -87,13 +91,20 @@ AND order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
     val salesPred = sqlContext.createDataFrame(
       pred.rdd.map {
         x =>
-          SaleVByState(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
-            x.getAs[SparseVector]("features").toArray(1).intValue, // Gets year
-            mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get, // Gets state
-            BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble, // Gets prediction and truncate it to 2 decimals
-            "US-"+mapStatesNames.value.get(mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get).get // sets the state abbreviation
-          )
-      })
+          ((x.getAs[SparseVector]("features").toArray(0).intValue, x.getAs[SparseVector]("features").toArray(1).intValue), // key: (month, year)
+            (StateSalesV(
+                  mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get, // gets state
+                  BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble, // Gets prediction
+                  "US-"+mapStatesNames.value.get(mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get).get // sets the state abbreviation
+            ))) // value: StateSales(state, prediction, abb) 
+        }
+        .aggregateByKey(List[StateSalesV]())(_ ++ List(_), _ ++ _)
+        .map{ x => SalesVByState(
+                x._1._1,
+                x._1._2,
+                x._2
+        )}
+      )
 
     WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_value_predictions_by_state")
   }
