@@ -70,7 +70,5 @@ object AlsoBoughtRecommender extends SparkJob {
 
     // We finally persist the DF into MongoDB to extract it from the dashboard
     WriteMongoDB.deleteAndPersistDF(alsoB, sqlContext, "also_bought_recommender")
-    alsoB.collect()
-
   }
 }

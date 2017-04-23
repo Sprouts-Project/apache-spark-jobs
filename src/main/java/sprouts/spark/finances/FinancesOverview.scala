@@ -12,7 +12,7 @@ import sprouts.spark.utils.WriteMongoDB
 import sprouts.spark.utils.ReadMongoDB
 
 case class SaleValue(month: Int, year: Int, value: Double)
-case class SaleValueByState(month: Int, year: Int, value: Double, state: String, abbreviation:String)
+case class SaleValueByState(month: Int, year: Int, statesSales: List[StateSalesV])
 case class FinacesOverview(monthly_sales: Array[SaleValue], monthly_sales_by_state: Array[SaleValueByState])
 
 object FinancesOverview extends SparkJob {
@@ -44,10 +44,13 @@ object FinancesOverview extends SparkJob {
     // The total monthly sales value during the last 24 months grouped by state
     val salesValuesByState = orders.map { x => ((x.getLong(1), x.getLong(2), x.getString(3)), x.getDouble(0)) }
       .reduceByKey(_ + _)
-      .map {
-        x => SaleValueByState(x._1._2.intValue(), x._1._1.intValue(), x._2, x._1._3, "US-"+mapStatesNames.value.get(x._1._3).get);
-      }.collect()
-
+      .map{ x => ((x._1._1, x._1._2),StateSalesV(x._1._3, x._2, "US-"+mapStatesNames.value.get(x._1._3).get) ) }
+      .aggregateByKey(List[StateSalesV]())(_ ++ List(_), _ ++ _)
+      .map{ x => SaleValueByState(
+          x._1._2.intValue,
+          x._1._1.intValue,
+          x._2
+        )}.collect()
     // Save and response
     val finaceOverview =
       sqlContext.createDataFrame(List(FinacesOverview(salesValues, salesValuesByState)))
