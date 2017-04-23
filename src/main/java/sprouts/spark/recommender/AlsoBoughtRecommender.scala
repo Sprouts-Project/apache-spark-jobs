@@ -27,7 +27,7 @@ import sprouts.spark.utils.ReadMySQL
 import org.apache.spark.sql.functions._
 
 case class AlsoBoughtRecommender(item_id: Int, alsoBought: List[RecommendedAndQuantity])
-case class RecommendedAndQuantity(item_id: Int, title: String, brand: String, imUrl:String, quantity: Long)
+case class RecommendedAndQuantity(item_id: Int, title: String, brand: String, imUrl:String, quantity: Int)
 
 object AlsoBoughtRecommender extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -57,7 +57,7 @@ object AlsoBoughtRecommender extends SparkJob {
     
     // for each item, aggregate by item id, having as value the recommended item and a list indicating the total quantity also bought
     val recommend = results.select(results.col("item_id"), results.col("r_item_id"),results.col("r_title"),results.col("r_brand"),results.col("r_imUrl"), results.col("sum(weight)"))
-      .map { x => (x.getInt(0), RecommendedAndQuantity(x.getInt(1),x.getString(2),x.getString(3),x.getString(4), x.getLong(5))) }
+      .map { x => (x.getInt(0), RecommendedAndQuantity(x.getInt(1),x.getString(2),x.getString(3),x.getString(4), x.getLong(5).toInt)) }
       .aggregateByKey(List[RecommendedAndQuantity]())(_ ++ List(_), _ ++ _)
 
     // DF to save in MongoDB
