@@ -25,7 +25,7 @@ import sprouts.spark.utils.WriteMongoDB
 import sprouts.spark.utils.ReadMySQL
 import sprouts.spark.stock.ItemVector
 
-case class ItemProfile(profile_id: Int, number_items: Long, categories: List[String])
+case class ItemProfile(profile_id: Int, number_items: Int, categories: List[String])
 case class ItemProfileMappedToItem(profile_id: Int, item_id: Int, categories: List[String], item_brand:String, item_description:String, item_imUrl:String, item_price:Double, item_title:String)
 
 //case class ItemProfileMappedToItem(profile_id: Int, item_id: Int, categories: List[String])
@@ -110,7 +110,7 @@ object ItemProfiles extends SparkJob {
       sqlContext.createDataFrame(
         numItemsByProfile.map {
           x =>
-            ItemProfile(x._1, x._2._1.longValue(), x._2._2) // Map each ellement in RDD with an ItemProfile
+            ItemProfile(x._1, x._2._1, x._2._2) // Map each ellement in RDD with an ItemProfile
         })
 
     // We finally persist the DF into MongoDB to extract it from the dashboard

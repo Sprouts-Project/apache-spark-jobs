@@ -29,7 +29,7 @@ import com.mongodb.spark.config.WriteConfig
 import sprouts.spark.utils.WriteMongoDB
 import sprouts.spark.utils.ReadMySQL
 
-case class CustomerProfile(profile_id: Int, number_customers: Long, age_interval: String, brands: List[String])
+case class CustomerProfile(profile_id: Int, number_customers: Int, age_interval: String, brands: List[String])
 
 object CustomerSegmentationAgeAndBrand extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {

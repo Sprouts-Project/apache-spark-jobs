@@ -18,7 +18,7 @@ import sprouts.spark.utils.ReadMySQL
 import org.apache.spark.mllib.clustering.KMeans
 import sprouts.spark.utils.WriteMongoDB
 
-case class CustomerProfileAgeAndItemProfile(profile_id: Int, number_customers: Long, age_interval: String, categories: List[String])
+case class CustomerProfileAgeAndItemProfile(profile_id: Int, number_customers: Int, age_interval: String, categories: List[String])
 
 object CustomerSegmentationAgeAndItemProfile extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
