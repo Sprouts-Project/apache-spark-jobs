@@ -1,18 +1,20 @@
 package sprouts.spark.stock
 
 import org.apache.spark.SparkContext
-import spark.jobserver.SparkJob
+import org.apache.spark.sql.SQLContext
 
 import com.typesafe.config.Config
-import spark.jobserver.SparkJobValidation
+
+import spark.jobserver.SparkJob
 import spark.jobserver.SparkJobValid
-import org.apache.spark.sql.SQLContext
+import spark.jobserver.SparkJobValidation
+import sprouts.spark.utils.ReadMongoDB
 import sprouts.spark.utils.ReadMySQL
 import sprouts.spark.utils.WriteMongoDB
-import sprouts.spark.utils.ReadMongoDB
 
 case class Sales(month: Int, year: Int, numProducts: Int)
-case class SaleStockByState(month: Int, year: Int, numProducts: Double, state: String, abbreviation: String)
+case class SaleStockByState(month: Int, year: Int, statesSales: List[StateSales])
+
 case class TopSaleProducts(id: Int, title: String, quantity: Int)
 
 case class StockOverview(monthly_sales: Array[Sales], monthly_sales_by_state: Array[SaleStockByState], top_products: Array[TopSaleProducts])
@@ -48,9 +50,13 @@ object StockOverview extends SparkJob {
     // The total monthly sales value during the last 24 months grouped by state
     val salesStocksByState = stocks.map { x => ((x.getLong(3), x.getLong(4), x.getString(5)), x.getInt(2)) }
       .reduceByKey(_ + _)
-      .map {
-        x => SaleStockByState(x._1._2.intValue(), x._1._1.intValue(), x._2, x._1._3, "US-"+mapStatesNames.value.get(x._1._3).get);
-      }.collect()
+      .map{ x => ((x._1._1, x._1._2),StateSales(x._1._3, x._2, "US-"+mapStatesNames.value.get(x._1._3).get) ) }
+      .aggregateByKey(List[StateSales]())(_ ++ List(_), _ ++ _)
+      .map{ x => SaleStockByState(
+          x._1._2.intValue,
+          x._1._1.intValue,
+          x._2
+        )}.collect()
 
     // Top 20 most monthly demanded products during the last 24 months.
     val topSaleProducts = stocks.map { x => ((x.getInt(0), x.getString(1)), x.getInt(2)) }
