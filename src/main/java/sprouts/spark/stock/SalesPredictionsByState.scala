@@ -19,7 +19,8 @@ import sprouts.spark.utils.WriteMongoDB
 import sprouts.spark.utils.ReadMongoDB
 
 case class ItemVectorByState(label: Double, features: SparseVector)
-case class SaleByState(month: Int, year: Int, state: String, sales: Int, abbreviation:String)
+case class SalesByState(month: Int, year: Int, statesSales: List[StateSales])
+case class StateSales(state: String, sales: Int, abbreviation:String)
 
 object SalesPredictionsByState extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -88,13 +89,21 @@ AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
     val salesPred = sqlContext.createDataFrame(
       pred.rdd.map {
         x =>
-          SaleByState(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
-            x.getAs[SparseVector]("features").toArray(1).intValue, // Gets year
-            mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get, // Gets state
-            x.getDouble(1).round.toInt, // Gets prediction
-            "US-"+mapStatesNames.value.get(mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get).get // sets the state abbreviation
-          ) 
-      })
+          ((x.getAs[SparseVector]("features").toArray(0).intValue, x.getAs[SparseVector]("features").toArray(1).intValue), // key: (month, year)
+            (StateSales(
+                  mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get, // gets state
+                  x.getDouble(1).round.toInt, // Gets prediction
+                  "US-"+mapStatesNames.value.get(mapIndexToStateId.value.get(x.getAs[SparseVector]("features").toArray(2).longValue()).get).get // sets the state abbreviation
+            ))) // value: StateSales(state, prediction, abb) 
+        }
+        .aggregateByKey(List[StateSales]())(_ ++ List(_), _ ++ _)
+        .map{ x => SalesByState(
+                x._1._1,
+                x._1._2,
+                x._2
+        )}
+      )
+      
 
     WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_predictions_by_state")
   }
