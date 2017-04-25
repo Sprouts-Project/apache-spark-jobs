@@ -4,7 +4,7 @@
 
 	<groupId>sprouts</groupId>
 	<artifactId>spark</artifactId>
-	<version>0.2.4</version>
+	<version>0.3.0</version>
 	<packaging>jar</packaging>
 
 	<name>apache-spark-jobs</name>
