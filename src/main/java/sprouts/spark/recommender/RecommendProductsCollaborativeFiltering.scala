@@ -10,6 +10,7 @@ import org.apache.spark.mllib.recommendation.ALS
 import com.typesafe.config.Config
 import org.apache.spark.mllib.recommendation.Rating
 import org.apache.spark.mllib.recommendation.MatrixFactorizationModel
+import sprouts.spark.utils.WriteMongoDB
 
 case class Recommendation(customer_id: Int, items: Array[Rating])
 
@@ -25,6 +26,17 @@ object RecommendProductsCollaborativeFiltering extends SparkJob {
 
   def execute(sc: SparkContext, user: Int): Any = {
     val model = MatrixFactorizationModel.load(sc, "/data/jobserver/models")
-    model.recommendProducts(user, 20)
+    val recommendations = model.recommendProducts(user, 20)
+
+    val sqlContext = SQLContext.getOrCreate(sc)
+    
+    val recommendationsDf = sqlContext.createDataFrame(recommendations)
+    
+    // save the recommendations to the warehouse collection collaborative_filtering_recommendations
+    WriteMongoDB.persistDF(recommendationsDf, sqlContext, "collaborative_filtering_recommendations")
+    
+    // return recommendations
+    recommendationsDf
+    
   }
 }
