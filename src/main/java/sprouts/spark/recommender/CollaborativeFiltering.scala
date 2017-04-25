@@ -14,6 +14,7 @@ import spark.jobserver.SparkJobValid
 import spark.jobserver.SparkJobValidation
 import sprouts.spark.utils.ReadMySQL
 import scalax.file.Path
+import sprouts.spark.utils.WriteMongoDB
 
 object CollaborativeFiltering extends SparkJob {
   override def runJob(sc: SparkContext, jobConfig: Config): Any = {
@@ -49,6 +50,9 @@ object CollaborativeFiltering extends SparkJob {
     }
 
     model.save(sc, "/data/jobserver/models")
-
+    
+    // delete all the save recommendations
+    WriteMongoDB.deleteCollection("collaborative_filtering_recommendations");
+    
   }
 }
