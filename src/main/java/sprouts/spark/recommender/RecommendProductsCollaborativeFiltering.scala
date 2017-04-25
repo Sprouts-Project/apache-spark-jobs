@@ -36,7 +36,7 @@ object RecommendProductsCollaborativeFiltering extends SparkJob {
     WriteMongoDB.persistDF(recommendationsDf, sqlContext, "collaborative_filtering_recommendations")
     
     // return recommendations
-    recommendationsDf
+    recommendationsDf.collect()
     
   }
 }
