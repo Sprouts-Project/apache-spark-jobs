@@ -47,7 +47,7 @@ object CustomersOverview extends SparkJob {
     val sqlContext = SQLContext.getOrCreate(sc)
 
     // Query to MySQL
-    val customers = ReadMySQL.read("(SELECT * FROM customer) AS data", sqlContext)
+    val customers = ReadMySQL.read("(SELECT * FROM customer) AS data", sqlContext).na.drop(Seq("birthdate"))
     val mapStatesNames = sc.broadcast(ReadMongoDB.read(sqlContext, "map_state_name_abbreviation")
       .select("name", "abbreviation")
       .map { x => (x.getString(0), x.getString(1)) } // maps (state_name, abbreviation)
@@ -75,14 +75,14 @@ object CustomersOverview extends SparkJob {
     val customersByState = customers.select(customers.col("state"))
       .map { x => (x.getString(0), 1) }
       .reduceByKey(_ + _)
-      .map{ x => CustomersByState(x._1, "US-"+mapStatesNames.value.get(x._1).get, x._2) }
+      .map{ x => CustomersByState(x._1, "US-"+mapStatesNames.value.get(x._1).getOrElse("DESC"), x._2) }
       .collect()
 
     val averageAgeByState = customers.select(customers.col("state"), unix_timestamp(customers.col("birthdate")))
       .map { x => (x.getString(0), ((((today - x.getLong(1)) * 1.0 / conversion), 1))) }
       .reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2))
       .mapValues { case (sum, count) => sum / count }
-      .map{ x => AverageAgeByState(x._1, "US-"+mapStatesNames.value.get(x._1).get, x._2) }
+      .map{ x => AverageAgeByState(x._1, "US-"+mapStatesNames.value.get(x._1).getOrElse("DESC"), x._2) }
       .collect()
 
     // DF to save in MongoDB
