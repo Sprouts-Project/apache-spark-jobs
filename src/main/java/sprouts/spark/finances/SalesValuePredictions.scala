@@ -16,6 +16,8 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.ml.tuning.TrainValidationSplitModel
 import java.util.Calendar
 import sprouts.spark.utils.WriteMongoDB
+import org.joda.time.format.DateTimeFormat
+import org.joda.time.DateTime
 
 case class ItemVectorValue(label: Double, features: SparseVector)
 case class SaleV(month: Int, year: Int, salesValue: Double)
@@ -37,21 +39,39 @@ object SalesValuePredictions extends SparkJob {
 (SELECT order_.totalPrice,
        MONTH(order_.date) as month, YEAR(order_.date) as year
 FROM order_
-WHERE order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
+WHERE order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 24 MONTH)
  AND order_.date < DATE_FORMAT(NOW() ,'%Y-%m-01')) AS data
       """
 
     val df = ReadMySQL.read(mySQLquery, sqlContext).rdd
       .map { x => ((x.getLong(1), x.getLong(2)), x.getDouble(0)) } // Map ( (month, year), sales). (month, year) as key
       .reduceByKey(_ + _) // We obtain the sales for each month
-      .map {
+      
+            // ((month, year, timeserie), sales)
+      // maps each month, year to timeserie.
+    val mapToTimeserie = sc.broadcast(df.map{ x => (DateTime.parse(""+x._1._2+"%02d".format(x._1._1)+"01", DateTimeFormat.forPattern("yyyyMMdd")).toDate, (x._1._1, x._1._2)) }
+        .sortByKey(true)  
+        .zipWithIndex()
+        .map{ x => (x._1._2, x._2) }
+        .collectAsMap()
+        .toMap)
+     
+     // gets the max value of the timeserie
+    val maxTimeserie = mapToTimeserie.value.map{ x => x._2 }.max
+     
+     // gets the next 12 months to predict
+    val mapToPredictTimeseries = sc.broadcast(getDates(maxTimeserie).map(_.swap).toMap)
+     
+      
+      
+    val itemVectorDf = df.map {
         x => // Map each ((month,year),sales) with a vector, with consists of (label=sales, features=(month,year))
           // SparseVector: 2 = number of features, (0, 1) = indexes
-          ItemVectorValue(x._2.doubleValue(), new SparseVector(2, Array(0, 1), Array(x._1._1.doubleValue(), x._1._2.doubleValue())))
+           ItemVectorValue(x._2.doubleValue(), new SparseVector(1, Array(0), Array( mapToTimeserie.value.get(x._1).get.toDouble )))
       }
 
     // Let's create a dataframe of label and features
-    val data = sqlContext.createDataFrame(df).na.drop()
+    val data = sqlContext.createDataFrame(itemVectorDf).na.drop()
 
     // Get the model
     val model = getModel(data)
@@ -59,10 +79,10 @@ WHERE order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
     // Get the dataframe with ItemVectors representing next 12 months
     val toPredict = sqlContext.createDataFrame(
       sc
-        .parallelize(getDates())
+        .parallelize((maxTimeserie+1).toInt.to((maxTimeserie+12).toInt).toSeq)
         .map {
           x =>
-            ItemVectorValue(0.0, new SparseVector(2, Array(0, 1), Array(x._1.toDouble, x._2.toDouble)))
+            ItemVectorValue(0.0, new SparseVector(1, Array(0), Array(x)))
         })
 
     // Make predictions on test data. model is the model with combination of parameters
@@ -74,10 +94,10 @@ WHERE order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
     val salesPred = sqlContext.createDataFrame(
       pred.rdd.map {
         x =>
-          SaleV(x.getAs[SparseVector]("features").toArray(0).intValue, // Gets month
-            x.getAs[SparseVector]("features").toArray(1).intValue, // Gets year
-            BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble) // Gets prediction and truncated to 2 decimals
-      })
+          SaleV(mapToPredictTimeseries.value.get(x.getAs[SparseVector]("features").toArray(0).intValue).get._1 , // Gets month
+            mapToPredictTimeseries.value.get(x.getAs[SparseVector]("features").toArray(0).intValue).get._2 , // Gets year
+            if(BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble >= 0) BigDecimal(x.getDouble(1)).setScale(2, BigDecimal.RoundingMode.HALF_UP).toDouble else 0.0 // Gets prediction and truncated to 2 decimals
+      )})
 
     WriteMongoDB.deleteAndPersistDF(salesPred, sqlContext, "sales_value_predictions")
   }
@@ -103,11 +123,12 @@ WHERE order_.date >= DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-01'), INTERVAL 48 MONTH)
     trainValidationSplit.fit(data)
   }
 
-  def getDates(): Array[(Int, Int)] = {
+  def getDates(maxTimeserie: Long): Array[((Int, Int), Int)] = {
+    var thisTimeserie = maxTimeserie.toInt
     val date = Calendar.getInstance()
     date.add(Calendar.MONTH, -1)
     val months = 1.to(12).toArray
-    for {i <- months} yield { date.add(Calendar.MONTH, 1); (date.get(Calendar.MONTH) + 1, date.get(Calendar.YEAR)) }
+    for { i <- months } yield { date.add(Calendar.MONTH, 1); thisTimeserie += 1; ((date.get(Calendar.MONTH) + 1, date.get(Calendar.YEAR)), thisTimeserie) }
   }
 
 }
