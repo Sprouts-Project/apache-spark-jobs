@@ -48,37 +48,44 @@ object CustomersOverview extends SparkJob {
 
     // Query to MySQL
     val customers = ReadMySQL.read("(SELECT * FROM customer) AS data", sqlContext).na.drop(Seq("birthdate"))
-    val mapStatesNames = sc.broadcast(ReadMongoDB.read(sqlContext, "map_state_name_abbreviation")
-      .select("name", "abbreviation")
+    val stateNames = ReadMongoDB.read(sqlContext, "map_state_name_abbreviation")
+      .select("name", "abbreviation").withColumnRenamed("name", "stateName")
+    
+    val mapStatesNames = sc.broadcast(
+      stateNames
       .map { x => (x.getString(0), x.getString(1)) } // maps (state_name, abbreviation)
       .collectAsMap().toMap // convert it to a map
     )
+
+    // remove the customers that are not from US
+    val customersFiltered = customers.join(stateNames, stateNames.col("stateName") === customers.col("state"), "leftouter")
+      .where(stateNames.col("stateName").isNotNull).drop("stateName")
     
     val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds)
     val conversion = 60 * 60 * 24 * 365 // age to seconds conversion
 
-    val customersAge = customers.select(unix_timestamp(customers.col("birthdate")))
+    val customersAge = customersFiltered.select(unix_timestamp(customersFiltered.col("birthdate")))
       .map { x => (((today - x.getLong(0)) * 1.0 / conversion)) }
 
     val averageAge = customersAge.mean()
 
-    val customersAgeMale = customers.select(unix_timestamp(customers.col("birthdate")), customers.col("sex")).filter(customers.col("sex") === "M")
+    val customersAgeMale = customersFiltered.select(unix_timestamp(customersFiltered.col("birthdate")), customersFiltered.col("sex")).filter(customersFiltered.col("sex") === "M")
       .map { x => (((today - x.getLong(0)) * 1.0 / conversion)) }
 
     val averageAgeMale = customersAgeMale.mean()
 
-    val customersAgeFemale = customers.select(unix_timestamp(customers.col("birthdate")), customers.col("sex")).filter(customers.col("sex") === "F")
+    val customersAgeFemale = customersFiltered.select(unix_timestamp(customersFiltered.col("birthdate")), customersFiltered.col("sex")).filter(customersFiltered.col("sex") === "F")
       .map { x => (((today - x.getLong(0)) * 1.0 / conversion)) }
 
     val averageAgeFemale = customersAgeFemale.mean()
 
-    val customersByState = customers.select(customers.col("state"))
+    val customersByState = customersFiltered.select(customersFiltered.col("state"))
       .map { x => (x.getString(0), 1) }
       .reduceByKey(_ + _)
       .map{ x => CustomersByState(x._1, "US-"+mapStatesNames.value.get(x._1).getOrElse("DESC"), x._2) }
       .collect()
 
-    val averageAgeByState = customers.select(customers.col("state"), unix_timestamp(customers.col("birthdate")))
+    val averageAgeByState = customersFiltered.select(customersFiltered.col("state"), unix_timestamp(customersFiltered.col("birthdate")))
       .map { x => (x.getString(0), ((((today - x.getLong(1)) * 1.0 / conversion), 1))) }
       .reduceByKey((x, y) => (x._1 + y._1, x._2 + y._2))
       .mapValues { case (sum, count) => sum / count }
