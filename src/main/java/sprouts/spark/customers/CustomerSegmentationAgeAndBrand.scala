@@ -52,7 +52,7 @@ FROM `digital-music`.ordereditem
 INNER JOIN `digital-music`.order_ ON `digital-music`.ordereditem.order_id = `digital-music`.order_.id
 INNER JOIN `digital-music`.customer ON `digital-music`.customer.id = `digital-music`.order_.customer_id
 INNER JOIN `digital-music`.item ON `digital-music`.item.id = `digital-music`.ordereditem.item_id
-   ) AS data""", sqlContext).na.drop(Array("brand")).filter("brand != ''")
+   ) AS data""", sqlContext).na.drop(Array("brand")).filter("brand != ''").na.drop(Seq("birthdate"))
 
     val today = Calendar.getInstance().getTimeInMillis() / 1000 // current unix timestamp (seconds)
     val conversion = 60 * 60 * 24 * 365 //   age to seconds conversion

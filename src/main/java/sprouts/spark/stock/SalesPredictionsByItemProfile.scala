@@ -51,8 +51,8 @@ object SalesPredictionsByItemProfile extends SparkJob {
    val mapItemProfileIdCategories = sc.broadcast(itemProfiles.map { x => (x.getInt(8), x.getAs[Seq[String]](1)) }.collectAsMap.toMap)
    
    val df_itemProfiles = df.join(itemProfiles,"item_id")
-    .map { x => ((x.getLong(2), x.getLong(3), x.getInt(11)), x.getInt(1)) } // Map ( (month, year, itemProfileId), sales). (month, year) as key
-    .reduceByKey(_ + _) // We obtain the sales for each month
+    .map { x => ((x.getLong(2), x.getLong(3), x.getInt(11)), x.getInt(1)) } // Map ( (month, year, itemProfileId), sales). (month, year, item profile) as key
+    .reduceByKey(_ + _) // We obtain the sales for each key
     .map {
         x => // Map each ((month,year),sales) with a vector, with consists of (label=sales, features=(month,year))
           // SparseVector: 3 = number of features, (0, 1, 2) = indexes
