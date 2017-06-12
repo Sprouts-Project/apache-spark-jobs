@@ -40,7 +40,7 @@ object CustomerSegmentationAgeAndItemProfile extends SparkJob {
 FROM `digital-music`.ordereditem
 INNER JOIN `digital-music`.order_ ON `digital-music`.ordereditem.order_id = `digital-music`.order_.id
 INNER JOIN `digital-music`.customer ON `digital-music`.customer.id = `digital-music`.order_.customer_id
-   ) AS data""", sqlContext)
+   ) AS data""", sqlContext).na.drop(Seq("birthdate"))
 
     val itemProfiles = ReadMongoDB.read(sqlContext, "item_profile_item_id_map")
       .select("categories", "item_id", "profile_id")

@@ -34,21 +34,27 @@ object StockOverview extends SparkJob {
     val stocks = ReadMySQL.read("(SELECT item_id, title, quantity, YEAR(date) as year, MONTH(date) as month,state FROM order_ " +
       " JOIN customer on customer.id = order_.customer_id JOIN ordereditem on order_.id = ordereditem.order_id JOIN item on item.id = ordereditem.item_id " +
       " WHERE date > DATE_SUB(DATE_FORMAT(NOW() ,'%Y-%m-%d'), INTERVAL 24 MONTH)) AS data", sqlContext)
-    val mapStatesNames = sc.broadcast(ReadMongoDB.read(sqlContext, "map_state_name_abbreviation")
-      .select("name", "abbreviation")
+    val stateNames = ReadMongoDB.read(sqlContext, "map_state_name_abbreviation")
+      .select("name", "abbreviation").withColumnRenamed("name", "stateName")
+    
+    val mapStatesNames = sc.broadcast(
+      stateNames
       .map { x => (x.getString(0), x.getString(1)) } // maps (state_name, abbreviation)
       .collectAsMap().toMap // convert it to a map
     )
     
+    val stockFiltered = stocks.join(stateNames, stateNames.col("stateName") === stocks.col("state"), "leftouter")
+      .where(stateNames.col("stateName").isNotNull).drop("stateName")
+    
     // The total monthly sales value during the last 24 months
-    val salesStocks = stocks.map { x => ((x.getLong(3), x.getLong(4)), x.getInt(2)) }
+    val salesStocks = stockFiltered.map { x => ((x.getLong(3), x.getLong(4)), x.getInt(2)) }
       .reduceByKey(_ + _)
       .map {
         x => Sales(x._1._2.intValue(), x._1._1.intValue(), x._2);
       }.collect()
 
     // The total monthly sales value during the last 24 months grouped by state
-    val salesStocksByState = stocks.map { x => ((x.getLong(3), x.getLong(4), x.getString(5)), x.getInt(2)) }
+    val salesStocksByState = stockFiltered.map { x => ((x.getLong(3), x.getLong(4), x.getString(5)), x.getInt(2)) }
       .reduceByKey(_ + _)
       .map{ x => ((x._1._1, x._1._2),StateSales(x._1._3, x._2, "US-"+mapStatesNames.value.get(x._1._3).get) ) }
       .aggregateByKey(List[StateSales]())(_ ++ List(_), _ ++ _)
@@ -59,7 +65,7 @@ object StockOverview extends SparkJob {
         )}.collect()
 
     // Top 20 most monthly demanded products during the last 24 months.
-    val topSaleProducts = stocks.map { x => ((x.getInt(0), x.getString(1)), x.getInt(2)) }
+    val topSaleProducts = stockFiltered.map { x => ((x.getInt(0), x.getString(1)), x.getInt(2)) }
       .reduceByKey(_ + _)
       .sortBy(_._2, false)
       .take(20)
